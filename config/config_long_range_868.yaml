@@ -1,0 +1,68 @@
+aoi:
+  bbox:
+    minLon: 12.0
+    minLat: 47.0
+    maxLon: 19.2
+    maxLat: 51.6
+raster:
+  resolution_m: 100
+viewshed:
+  max_distance_m: 80000
+  observer_height_default_m: 6
+  target_height_m: 0
+  curvature_correction: true
+  refraction_coeff: 0.13
+dem:
+  mode: srtm
+  srtm_product: SRTM3
+  path: data/dem/dem.tif
+  prepared_path: data/dem/dem_prepared.tif
+  cache_dir: data/dem
+input:
+  nodes_csv: data/nodes/nodes.csv
+  validation:
+    drop_invalid_coords: true
+    drop_zero_coords: true
+    dedupe_by_id: true
+  height_strategy:
+    mode: adaptive_min
+    min_height_m: 4
+    max_height_m: 120
+    local_radius_m: 300
+    clearance_margin_m: 2
+    use_fresnel: true
+    fresnel_clearance_ratio: 0.6
+    fresnel_sample_ratio: 0.5
+compute:
+  tmp_dir: tmp/viewsheds
+  parallel: true
+  workers: 8
+output:
+  coverage_tif: out/coverage_count.tif
+  coverage_png: out/coverage_count.png
+  nodes_geojson: out/nodes.geojson
+  nodes_clean_csv: out/nodes_clean.csv
+  nodes_rejected_csv: out/nodes_rejected.csv
+  nodes_stats_json: out/nodes_stats.json
+  coverage_meta_json: out/coverage_meta.json
+  tiles_dir: out/tiles
+  coverage_binary_png: out/coverage_binary.png
+export:
+  png_colormap: viridis
+  png_percentile_clip: 99
+  tiles:
+    enabled: true
+    min_zoom: 8
+    max_zoom: 11
+  node_overlays:
+    enabled: true
+    dir: out/node_overlays
+    index_json: out/node_overlays/index.json
+    color_rgba:
+    - 255
+    - 92
+    - 64
+    - 170
+    visible_threshold: 1
+radio:
+  frequency_mhz: 868
