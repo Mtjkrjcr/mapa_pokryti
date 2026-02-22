@@ -1,4 +1,4 @@
-# mapapokryti
+# Mapa Pokryti
 
 Lokální výpočet LOS/viewshed coverage nad DEM pro velké množství nodů (350+).
 
