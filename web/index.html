@@ -31,6 +31,22 @@
         <input id="nodeSearch" type="text" placeholder="Filtrovat podle názvu nebo ID" />
         <div id="nodesList" class="nodes-list"></div>
       </div>
+      <div class="gsm-wrap">
+        <label class="inline-check" for="gsmPointsEnabled">
+          <input id="gsmPointsEnabled" type="checkbox" />
+          <span>LTE800/B20 BTS (kandidáti rušení)</span>
+        </label>
+        <label for="gsmOperatorFilter">Filtr operátora</label>
+        <select id="gsmOperatorFilter">
+          <option value="all">Všichni</option>
+          <option value="o2">O2</option>
+          <option value="tmobile">T-Mobile</option>
+          <option value="vodafone">Vodafone</option>
+        </select>
+        <label for="gsmSearch">Filtr BTS (CellID/TAC/okres/umístění)</label>
+        <input id="gsmSearch" type="text" placeholder="Např. AB, Chodov, 1131..." />
+        <div id="gsmStatus" class="gsm-status">LTE800/B20 BTS kandidáti rušení: vypnuto</div>
+      </div>
       <div class="legend" id="legend"></div>
     </div>
     <div id="map"></div>
@@ -40,6 +56,6 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=13"></script>
   </body>
 </html>

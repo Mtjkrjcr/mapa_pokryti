@@ -89,7 +89,9 @@ body {
   font-size: 13px;
 }
 
-#aggregateMode {
+#aggregateMode,
+#gsmOperatorFilter,
+#gsmSearch {
   border: 1px solid #d3dde6;
   border-radius: 8px;
   padding: 7px 9px;
@@ -123,6 +125,31 @@ body {
 .node-item-id {
   opacity: 0.7;
   font-size: 11px;
+}
+
+.gsm-wrap {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d3dde6;
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.gsm-status {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #31424d;
+  background: #f4f8fb;
+  border-radius: 6px;
+  padding: 6px 7px;
 }
 
 .legend-item {
