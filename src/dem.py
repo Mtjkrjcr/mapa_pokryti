@@ -1,3 +1,5 @@
+"""Prepare a DEM raster for coverage computation (clip/reproject/resample)."""
+
 import shutil
 import subprocess
 import json
@@ -5,6 +7,7 @@ from pathlib import Path
 
 
 def _bbox_from_cfg(cfg: dict) -> tuple[float, float, float, float]:
+    """Resolve AOI bounds either from bbox or from Polygon/MultiPolygon GeoJSON."""
     aoi = cfg["aoi"]
     if "bbox" in aoi and aoi["bbox"]:
         b = aoi["bbox"]
@@ -48,6 +51,7 @@ def _bbox_from_cfg(cfg: dict) -> tuple[float, float, float, float]:
 
 
 def _run(cmd: list[str]) -> None:
+    """Run external command and surface stdout/stderr on failure."""
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(
@@ -56,6 +60,7 @@ def _run(cmd: list[str]) -> None:
 
 
 def _utm_epsg_for_lonlat(lon: float, lat: float) -> str:
+    """Choose a local UTM CRS so downstream distances are in meters."""
     zone = int((lon + 180.0) // 6.0) + 1
     if lat >= 0:
         return f"EPSG:{32600 + zone}"
@@ -63,6 +68,7 @@ def _utm_epsg_for_lonlat(lon: float, lat: float) -> str:
 
 
 def prepare_dem(cfg: dict) -> str:
+    """Create the prepared DEM raster used by `compute_coverage`."""
     dem_cfg = cfg["dem"]
     mode = dem_cfg.get("mode", "local")
     raw_dem_path = Path(dem_cfg.get("path", "data/dem/dem.tif"))
@@ -71,6 +77,7 @@ def prepare_dem(cfg: dict) -> str:
     prepared_dem_path.parent.mkdir(parents=True, exist_ok=True)
 
     if mode == "local":
+        # Reuse an existing DEM file provided by the user.
         if not raw_dem_path.exists():
             raise FileNotFoundError(
                 f"DEM not found at {raw_dem_path}. Add your DEM.tif or switch dem.mode to srtm."
@@ -78,6 +85,7 @@ def prepare_dem(cfg: dict) -> str:
         source_path = raw_dem_path
 
     elif mode == "srtm":
+        # Download DEM for AOI via the `elevation` CLI (`eio`).
         eio = shutil.which("eio")
         if not eio:
             raise RuntimeError(
@@ -108,6 +116,7 @@ def prepare_dem(cfg: dict) -> str:
     else:
         raise ValueError(f"Unsupported dem.mode: {mode}")
 
+    # Normalize source DEM into one projected raster aligned to metric resolution.
     gdalwarp = shutil.which("gdalwarp")
     if not gdalwarp:
         raise RuntimeError("gdalwarp not found in PATH")
@@ -117,6 +126,7 @@ def prepare_dem(cfg: dict) -> str:
     center_lat = (min_lat + max_lat) / 2.0
     target_srs = _utm_epsg_for_lonlat(center_lon, center_lat)
 
+    # Expand crop by max viewshed range so edge nodes still have terrain context.
     max_distance_m = float(cfg["viewshed"].get("max_distance_m", 20000))
     buffer_deg = max_distance_m / 111320.0
     te_min_lon = min_lon - buffer_deg

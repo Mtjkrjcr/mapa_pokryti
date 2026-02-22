@@ -14,6 +14,7 @@
   </head>
   <body>
     <div class="panel">
+      <!-- Left control panel: coverage controls, node list and LTE B20 interference layer filters -->
       <h1>LOS / Viewshed Coverage</h1>
       <label for="opacity">Opacity coverage: <span id="opacityValue">0.65</span></label>
       <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.65" />
@@ -49,6 +50,7 @@
       </div>
       <div class="legend" id="legend"></div>
     </div>
+    <!-- Main Leaflet canvas -->
     <div id="map"></div>
 
     <script

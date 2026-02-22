@@ -1,3 +1,5 @@
+"""Merge per-node binary viewshed rasters into one count raster."""
+
 from pathlib import Path
 from typing import Optional
 
@@ -7,6 +9,7 @@ from rasterio.warp import Resampling, reproject
 
 
 def merge_binary_rasters(raster_paths: list[str], out_path: str, template_path: Optional[str] = None) -> dict:
+    """Reproject each binary raster into a shared grid and sum visible pixels."""
     if not raster_paths:
         raise ValueError("No viewshed rasters provided for merge")
 
@@ -19,6 +22,7 @@ def merge_binary_rasters(raster_paths: list[str], out_path: str, template_path: 
         dst_crs = src0.crs
 
     for p in raster_paths:
+        # Viewshed outputs can differ slightly in grid alignment; reproject to base grid first.
         with rasterio.open(p) as src:
             src_arr = src.read(1)
             dst_arr = np.zeros_like(acc, dtype=np.uint8)

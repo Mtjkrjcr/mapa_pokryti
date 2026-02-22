@@ -1,3 +1,5 @@
+"""Node validation, per-node viewshed runs, and aggregate coverage merge."""
+
 import json
 import multiprocessing as mp
 import shutil
@@ -16,6 +18,7 @@ from .merge import merge_binary_rasters
 
 @dataclass
 class Node:
+    """Normalized node record used throughout the compute step."""
     node_id: str
     name: str
     lat: float
@@ -27,6 +30,7 @@ class Node:
 
 
 def _fresnel_radius_m(distance_m: float, frequency_mhz: float, split_ratio: float = 0.5) -> float:
+    """Approximate first Fresnel zone radius (meters) for added clearance margin."""
     # First Fresnel zone radius:
     # r[m] = 17.32 * sqrt((d1_km * d2_km) / (f_GHz * D_km))
     if distance_m <= 0 or frequency_mhz <= 0:
@@ -41,6 +45,7 @@ def _fresnel_radius_m(distance_m: float, frequency_mhz: float, split_ratio: floa
 
 
 def _run(cmd: list[str]) -> None:
+    """Run external command and keep stdout/stderr in the exception message."""
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(
@@ -49,6 +54,7 @@ def _run(cmd: list[str]) -> None:
 
 
 def _load_nodes_dataframe(path: str) -> pd.DataFrame:
+    """Load nodes from supported JSON/CSV variants used by the project/community exports."""
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Nodes file not found: {p}")
@@ -83,6 +89,7 @@ def _estimate_min_height_from_local_terrain(
     local_radius_m: float,
     clearance_margin_m: float,
 ) -> float:
+    """Estimate antenna height needed to clear local terrain around the node."""
     row, col = rowcol(src.transform, ox, oy)
     pixel_x = abs(float(src.transform.a))
     pixel_y = abs(float(src.transform.e))
@@ -105,6 +112,7 @@ def _estimate_min_height_from_local_terrain(
 
 
 def _load_nodes(cfg: dict, dem_path: str) -> list[Node]:
+    """Validate nodes, derive final observer heights, and attach DEM ground elevation."""
     df = _load_nodes_dataframe(cfg["input"]["nodes_csv"])
     required = {"id", "lat", "lon"}
     missing = required - set(df.columns)
@@ -112,6 +120,7 @@ def _load_nodes(cfg: dict, dem_path: str) -> list[Node]:
         raise ValueError(f"Missing node columns: {missing}")
 
     validation = cfg.get("input", {}).get("validation", {})
+    # These stats make CSV cleaning and config tuning debuggable after a run.
     stats: dict[str, int] = {}
 
     rows_input = len(df)
@@ -148,6 +157,7 @@ def _load_nodes(cfg: dict, dem_path: str) -> list[Node]:
     stats["rows_dropped_duplicate_id"] = int(rows_deduped)
     stats["rows_valid"] = int(len(df))
 
+    # Optional export of rejected rows so data quality issues are transparent.
     rejected_csv = cfg.get("output", {}).get("nodes_rejected_csv")
     if rejected_csv:
         rejected = _load_nodes_dataframe(cfg["input"]["nodes_csv"]).copy()
@@ -197,6 +207,7 @@ def _load_nodes(cfg: dict, dem_path: str) -> list[Node]:
             row, col = rowcol(src.transform, ox, oy)
             ground_elev = np.nan
             min_required_h = 0.0
+            # Sample DEM only if node falls inside raster extent.
             if 0 <= row < src.height and 0 <= col < src.width:
                 ground_elev = float(src.read(1, window=((row, row + 1), (col, col + 1)))[0, 0])
                 if height_mode == "adaptive_min":
@@ -211,6 +222,7 @@ def _load_nodes(cfg: dict, dem_path: str) -> list[Node]:
 
             fresnel_margin = 0.0
             if use_fresnel:
+                # Add RF clearance margin on top of terrain-based minimum height.
                 fresnel_margin = _fresnel_radius_m(max_distance_m, frequency_mhz, fresnel_sample_ratio)
                 fresnel_margin = max(0.0, fresnel_margin * fresnel_clearance_ratio)
 
@@ -270,6 +282,7 @@ def _load_nodes(cfg: dict, dem_path: str) -> list[Node]:
 
 
 def _nodes_to_geojson(nodes: list[Node], out_path: str) -> None:
+    """Export nodes in GeoJSON format for the web UI."""
     features = []
     for n in nodes:
         features.append(
@@ -294,6 +307,7 @@ def _nodes_to_geojson(nodes: list[Node], out_path: str) -> None:
 
 
 def _compute_one(args: tuple[dict, Node, str]) -> str:
+    """Run `gdal_viewshed` for one node; return empty string if node is outside DEM."""
     cfg, node, dem_path = args
     tmp_dir = Path(cfg["compute"]["tmp_dir"])
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -343,6 +357,7 @@ def _compute_one(args: tuple[dict, Node, str]) -> str:
 
 
 def compute_coverage(cfg: dict) -> dict:
+    """Compute all viewsheds, merge coverage, and export node GeoJSON."""
     dem_path = cfg["dem"].get("prepared_path", cfg["dem"]["path"])
     if not Path(dem_path).exists():
         dem_path = cfg["dem"]["path"]
@@ -356,6 +371,7 @@ def compute_coverage(cfg: dict) -> dict:
 
     jobs = [(cfg, n, dem_path) for n in nodes]
 
+    # Parallel mode is the default for production-size node sets.
     if parallel and worker_count > 1:
         with mp.Pool(processes=worker_count) as pool:
             rasters = pool.map(_compute_one, jobs)

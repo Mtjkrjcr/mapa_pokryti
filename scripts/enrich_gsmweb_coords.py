@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Enrich GSMweb GSM CSV exports with GPS coordinates scraped from `gps=only` pages."""
+
 from __future__ import annotations
 
 import csv
@@ -28,10 +30,11 @@ HEADERS = {
 
 
 def fetch(url: str) -> str:
+    """Fetch one GSMweb page with a browser-like User-Agent."""
     req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=60) as resp:
         data = resp.read()
-    # GSMweb pages are inconsistent; numeric fields/URLs survive utf-8 ignore.
+    # GSMweb encoding is inconsistent; lossy UTF-8 decode still preserves numeric fields/URLs.
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError:
@@ -39,6 +42,7 @@ def fetch(url: str) -> str:
 
 
 def strip_tags(value: str) -> str:
+    """Convert HTML cell content to normalized plain text."""
     value = re.sub(r"<[^>]+>", "", value)
     value = html.unescape(value)
     value = value.replace("\xa0", " ")
@@ -46,6 +50,7 @@ def strip_tags(value: str) -> str:
 
 
 def parse_cid_int(value: str) -> int:
+    """Parse normal CID and repeater forms like `12345r`."""
     m = re.match(r"^\s*(\d+)", value or "")
     if not m:
         raise ValueError(f"Bad CID: {value!r}")
@@ -53,6 +58,7 @@ def parse_cid_int(value: str) -> int:
 
 
 def parse_districts(seznam: str) -> list[str]:
+    """Collect district codes that can be queried with `gps=only`."""
     url = f"{BASE_URL}/seznamy/okresy.php?seznam={urllib.parse.quote(seznam)}"
     page = fetch(url)
     codes = sorted(set(re.findall(r"udaj=([A-Z0-9]{2})&amp;gps=only", page)))
@@ -62,6 +68,7 @@ def parse_districts(seznam: str) -> list[str]:
 
 
 def parse_search_page(operator_key: str, search_op: str, district: str) -> dict[tuple[str, int, int], tuple[float, float]]:
+    """Parse one district search page and extract {(operator, CID, LAC): (lat, lon)}."""
     q = urllib.parse.urlencode(
         {
             "op": search_op,
@@ -79,6 +86,7 @@ def parse_search_page(operator_key: str, search_op: str, district: str) -> dict[
         tds = re.findall(r"<td\b[^>]*>(.*?)</td>", row, flags=re.IGNORECASE | re.DOTALL)
         if len(tds) < 11:
             continue
+        # Mapy.com link encodes coordinates as x=lon, y=lat.
         m = re.search(r"[?&]x=([0-9.+-]+)(?:&amp;|&)y=([0-9.+-]+)", row)
         if not m:
             continue
@@ -98,6 +106,7 @@ def parse_search_page(operator_key: str, search_op: str, district: str) -> dict[
 
 
 def build_lookup() -> dict[tuple[str, int, int], tuple[float, float]]:
+    """Build full coordinate lookup across all supported GSM operators and districts."""
     lookup: dict[tuple[str, int, int], tuple[float, float]] = {}
     counts = Counter()
     for operator_key, cfg in OPERATORS.items():
@@ -112,6 +121,7 @@ def build_lookup() -> dict[tuple[str, int, int], tuple[float, float]]:
 
 
 def write_lookup_csv(lookup: dict[tuple[str, int, int], tuple[float, float]]) -> None:
+    """Persist lookup table for debugging/reuse."""
     LOOKUP_CSV.parent.mkdir(parents=True, exist_ok=True)
     with LOOKUP_CSV.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f, delimiter=";")
@@ -121,6 +131,7 @@ def write_lookup_csv(lookup: dict[tuple[str, int, int], tuple[float, float]]) ->
 
 
 def enrich_csv(lookup: dict[tuple[str, int, int], tuple[float, float]]) -> None:
+    """Join coordinates into the merged UTF-8 GSM CSV used by this repo."""
     stats = Counter()
     unmatched_by_op = Counter()
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
@@ -159,6 +170,7 @@ def enrich_csv(lookup: dict[tuple[str, int, int], tuple[float, float]]) -> None:
 
 
 def main() -> int:
+    """CLI entrypoint for one-shot GSM enrichment."""
     if not INPUT_CSV.exists():
         print(f"Missing input CSV: {INPUT_CSV}", file=sys.stderr)
         return 1

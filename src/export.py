@@ -1,3 +1,5 @@
+"""Export compute outputs into web-friendly assets (PNG/tiles/overlays)."""
+
 import json
 import shutil
 import subprocess
@@ -10,6 +12,7 @@ from rasterio.warp import transform_bounds
 
 
 def _run(cmd: list[str]) -> None:
+    """Run GDAL helper command and raise with stdout/stderr if it fails."""
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(
@@ -18,6 +21,7 @@ def _run(cmd: list[str]) -> None:
 
 
 def export_png(cfg: dict) -> dict:
+    """Render aggregate coverage raster into transparent PNG + metadata JSON."""
     tif = Path(cfg["output"]["coverage_tif"])
     png = Path(cfg["output"]["coverage_png"])
     binary_png = Path(cfg["output"].get("coverage_binary_png", "out/coverage_binary.png"))
@@ -31,6 +35,7 @@ def export_png(cfg: dict) -> dict:
         bounds = src.bounds
         b4326 = transform_bounds(src.crs, "EPSG:4326", bounds.left, bounds.bottom, bounds.right, bounds.top)
 
+    # Clip color scale to percentile so a few high-count pixels don't flatten contrast.
     clip_pct = float(cfg["export"].get("png_percentile_clip", 99))
     vmax = np.percentile(arr, clip_pct) if arr.size else 1
     if vmax <= 0:
@@ -72,6 +77,7 @@ def export_png(cfg: dict) -> dict:
 
 
 def export_tiles(cfg: dict) -> dict:
+    """Optionally generate XYZ tiles for smoother Leaflet rendering."""
     tiles_cfg = cfg["export"].get("tiles", {})
     if not bool(tiles_cfg.get("enabled", False)):
         return {"tiles_enabled": False}
@@ -86,6 +92,7 @@ def export_tiles(cfg: dict) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp_byte_tif.parent.mkdir(parents=True, exist_ok=True)
 
+    # Convert count raster to 8-bit display raster before running gdal2tiles.
     with rasterio.open(tif) as src:
         arr = src.read(1).astype(np.float32)
         profile = src.profile.copy()
@@ -116,6 +123,7 @@ def export_tiles(cfg: dict) -> dict:
 
 
 def export_node_overlays(cfg: dict) -> dict:
+    """Create one transparent PNG overlay per node for toggle-in-map UX."""
     node_cfg = cfg["export"].get("node_overlays", {})
     if not bool(node_cfg.get("enabled", True)):
         return {"node_overlays_enabled": False}
@@ -128,6 +136,7 @@ def export_node_overlays(cfg: dict) -> dict:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     index_path.parent.mkdir(parents=True, exist_ok=True)
+    # Remove stale overlays from previous runs so the index matches the filesystem.
     for old_png in out_dir.glob("*.png"):
         old_png.unlink()
 
@@ -173,6 +182,7 @@ def export_node_overlays(cfg: dict) -> dict:
 
 
 def export_outputs(cfg: dict) -> dict:
+    """Run all export sub-steps and combine their metadata."""
     png_meta = export_png(cfg)
     tiles_meta = export_tiles(cfg)
     node_overlay_meta = export_node_overlays(cfg)

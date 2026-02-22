@@ -1,3 +1,5 @@
+"""CLI entrypoint for the coverage/viewshed pipeline."""
+
 import argparse
 import json
 from pathlib import Path
@@ -10,11 +12,13 @@ from .viewshed import compute_coverage
 
 
 def load_config(path: str) -> dict:
+    """Load YAML config into a plain dict used across the pipeline."""
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def ensure_dirs(cfg: dict) -> None:
+    """Create directories expected by prepare/compute/export stages."""
     paths = [
         cfg["dem"].get("cache_dir", "data/dem"),
         Path(cfg["dem"].get("path", "data/dem/dem.tif")).parent,
@@ -28,30 +32,35 @@ def ensure_dirs(cfg: dict) -> None:
 
 
 def cmd_prepare_dem(cfg: dict) -> None:
+    """Run DEM preparation and print resulting file path."""
     ensure_dirs(cfg)
     dem_path = prepare_dem(cfg)
     print(f"DEM ready: {dem_path}")
 
 
 def cmd_compute(cfg: dict) -> None:
+    """Run viewshed computation and print JSON summary."""
     ensure_dirs(cfg)
     result = compute_coverage(cfg)
     print(json.dumps(result, indent=2))
 
 
 def cmd_export(cfg: dict) -> None:
+    """Run export stage and print JSON summary."""
     ensure_dirs(cfg)
     result = export_outputs(cfg)
     print(json.dumps(result, indent=2))
 
 
 def cmd_all(cfg: dict) -> None:
+    """Execute the whole pipeline in the correct order."""
     cmd_prepare_dem(cfg)
     cmd_compute(cfg)
     cmd_export(cfg)
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build parser for `python -m src.main`."""
     parser = argparse.ArgumentParser(description="Coverage/viewshed pipeline")
     parser.add_argument("command", choices=["prepare-dem", "compute", "export", "all"])
     parser.add_argument("--config", required=True, help="Path to YAML config")
@@ -59,6 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """CLI dispatcher."""
     parser = build_parser()
     args = parser.parse_args()
     cfg = load_config(args.config)

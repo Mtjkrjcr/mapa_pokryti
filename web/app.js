@@ -1,3 +1,7 @@
+// Client-side Leaflet app for:
+// 1) aggregate coverage overlay,
+// 2) per-node coverage overlays,
+// 3) LTE800/B20 BTS candidates near our nodes (potential 868 MHz interferers).
 const CONFIG = {
   nodesUrl: "/out/nodes.geojson",
   coverageMetaUrl: "/out/coverage_meta.json",
@@ -10,6 +14,7 @@ const CONFIG = {
   gsmInterferenceRadiusM: 5000,
 };
 
+// Base map + custom pane so dense LTE points stay under node markers.
 const map = L.map("map").setView([50.08, 14.44], 11);
 map.createPane("lteB20Pane");
 map.getPane("lteB20Pane").style.zIndex = "350";
@@ -55,10 +60,12 @@ const gsmOperatorFilter = document.getElementById("gsmOperatorFilter");
 const gsmSearch = document.getElementById("gsmSearch");
 const gsmStatus = document.getElementById("gsmStatus");
 
+// Convert generated paths (which may contain absolute paths) into URLs served from `/out/`.
 function toWebOutPath(absOrRel) {
   return String(absOrRel || "").replace(/^.*out\//, "/out/");
 }
 
+// Small HTML escaper for popup content built from CSV/GeoJSON strings.
 function escapeHtml(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -68,6 +75,7 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
+// Minimal CSV parser (semicolon-separated, quoted fields supported) to avoid extra deps.
 function parseCsvLine(line, delimiter = ";") {
   const out = [];
   let cur = "";
@@ -115,6 +123,7 @@ function parseSemicolonCsv(text) {
   return rows;
 }
 
+// Keep operator naming user-friendly in the UI while storing normalized keys internally.
 function formatOperator(op) {
   if (op === "o2") return "O2";
   if (op === "tmobile") return "T-Mobile";
@@ -122,6 +131,7 @@ function formatOperator(op) {
   return op || "n/a";
 }
 
+// Popup focuses on the fields needed to inspect a potentially interfering LTE B20 site.
 function buildGsmPopupHtml(entry) {
   return [
     `<b>${escapeHtml(formatOperator(entry.operator))}</b>`,
@@ -145,6 +155,7 @@ function getGsmFilterQuery() {
   return gsmSearch.value.trim().toLowerCase();
 }
 
+// Standard great-circle distance for "near node" filtering.
 function haversineMeters(lat1, lon1, lat2, lon2) {
   const toRad = Math.PI / 180;
   const dLat = (lat2 - lat1) * toRad;
@@ -179,6 +190,7 @@ function isPotentialInterfererForNode(entry) {
   return false;
 }
 
+// Lazy-load the LTE B20 CSV only when the user enables the layer.
 async function loadGsmwebPoints() {
   if (gsmLoaded) return gsmEntries;
   if (gsmLoadPromise) return gsmLoadPromise;
@@ -201,6 +213,7 @@ async function loadGsmwebPoints() {
           lat,
           lon,
           operator: String(r.operator || "").toLowerCase(),
+          // Precomputed lowercase search blob keeps client-side filtering simple and fast.
           _search: [
             r.operator,
             r.CellID,
@@ -236,6 +249,7 @@ function clearGsmMarkers() {
   gsmMarkersMatched = 0;
 }
 
+// Re-render visible LTE markers after filter/map extent changes.
 function renderGsmPoints() {
   if (!gsmPointsEnabled.checked) {
     if (map.hasLayer(gsmLayerGroup)) map.removeLayer(gsmLayerGroup);
@@ -254,6 +268,7 @@ function renderGsmPoints() {
 
   const op = gsmOperatorFilter.value || "all";
   const q = getGsmFilterQuery();
+  // Render only markers inside current viewport to keep the browser responsive.
   const bounds = map.getBounds();
   const maxVisible = CONFIG.gsmMaxVisiblePoints;
 
@@ -306,6 +321,7 @@ function setCoverageOpacity(v) {
   }
 }
 
+// Aggregate coverage is hidden when any single-node overlay is selected.
 function setAggregateCoverageVisible(visible) {
   if (!coverageLayer) return;
   const has = map.hasLayer(coverageLayer);
@@ -323,6 +339,7 @@ function removeAggregateLayer() {
   coverageLayer = null;
 }
 
+// Rebuild aggregate layer when mode changes (color vs red) or metadata is loaded.
 function buildAggregateLayer() {
   if (!aggregateMeta) return;
   removeAggregateLayer();
@@ -423,6 +440,7 @@ async function loadNodeOverlayIndex() {
   return nodeOverlayIndex;
 }
 
+// Selection toggles per-node coverage overlays while preserving aggregate mode behavior.
 async function setNodeSelection(nodeId, selected) {
   const idx = await loadNodeOverlayIndex();
   if (!idx || !idx.nodes || !idx.nodes[nodeId]) {
@@ -502,6 +520,7 @@ gsmOperatorFilter.addEventListener("change", () => {
   renderGsmPoints();
 });
 
+// Debounced text filtering avoids re-rendering thousands of LTE points on every keystroke.
 let gsmSearchTimer = null;
 gsmSearch.addEventListener("input", () => {
   if (gsmSearchTimer) clearTimeout(gsmSearchTimer);
@@ -521,6 +540,7 @@ async function loadNodes() {
   if (!res.ok) return;
   const geojson = await res.json();
 
+  // Nodes remain the primary layer for interaction; LTE points are just contextual.
   const layer = L.geoJSON(geojson, {
     pointToLayer: (feature, latlng) =>
       L.circleMarker(latlng, {
@@ -567,6 +587,7 @@ async function loadCoverage() {
   buildAggregateLayer();
 }
 
+// Static legend for aggregate coverage count colors.
 function renderLegend() {
   const values = [0, 1, 5, 10, 20, 50, 100];
   const colors = ["#440154", "#482878", "#3e4989", "#31688e", "#26828e", "#35b779", "#fde725"];
@@ -582,6 +603,7 @@ function renderLegend() {
 }
 
 (async () => {
+  // Expose a tiny global for popup button callbacks (Leaflet popup HTML runs outside module scope).
   window.__toggleNodeCoverage = (nodeId) => toggleNodeSelection(String(nodeId || ""));
   aggregateModeSelect.addEventListener("change", () => {
     aggregateMode = aggregateModeSelect.value === "red" ? "red" : "color";
